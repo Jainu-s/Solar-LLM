@@ -1,0 +1,346 @@
+/* Themes CSS for Solar LLM (light and dark modes) */
+
+/* Light theme (default) */
+:root,
+.light-theme {
+  /* Background colors */
+  --bg-primary: #FFFFFF;
+  --bg-secondary: #F9FAFB;
+  --bg-tertiary: #F3F4F6;
+  
+  /* Text colors */
+  --text-primary: #111827;
+  --text-secondary: #4B5563;
+  --text-tertiary: #9CA3AF;
+  --text-inverted: #FFFFFF;
+  
+  /* Border colors */
+  --border-light: #E5E7EB;
+  --border-medium: #D1D5DB;
+  --border-heavy: #9CA3AF;
+  
+  /* Interactive colors */
+  --interactive-normal: #2563EB;
+  --interactive-hover: #1D4ED8;
+  --interactive-muted: #DBEAFE;
+  
+  /* Status colors */
+  --success: #10B981;
+  --warning: #F59E0B;
+  --error: #EF4444;
+  
+  /* Shadow colors */
+  --shadow-color: rgba(0, 0, 0, 0.1);
+  
+  /* Code block */
+  --code-bg: #F3F4F6;
+  --code-text: #1F2937;
+  --code-border: #E5E7EB;
+  
+  /* Chat bubbles */
+  --user-bubble-bg: #2563EB;
+  --user-bubble-text: #FFFFFF;
+  --assistant-bubble-bg: #F3F4F6;
+  --assistant-bubble-text: #111827;
+  
+  /* Sidebar */
+  --sidebar-bg: #F3F4F6;
+  --sidebar-text: #111827;
+  --sidebar-item-hover: rgba(37, 99, 235, 0.1);
+  --sidebar-item-active: rgba(37, 99, 235, 0.2);
+}
+
+/* Dark theme */
+.dark-theme {
+  /* Background colors */
+  --bg-primary: #1F2937;
+  --bg-secondary: #111827;
+  --bg-tertiary: #374151;
+  
+  /* Text colors */
+  --text-primary: #F9FAFB;
+  --text-secondary: #E5E7EB;
+  --text-tertiary: #9CA3AF;
+  --text-inverted: #111827;
+  
+  /* Border colors */
+  --border-light: #374151;
+  --border-medium: #4B5563;
+  --border-heavy: #6B7280;
+  
+  /* Interactive colors */
+  --interactive-normal: #3B82F6;
+  --interactive-hover: #60A5FA;
+  --interactive-muted: #1E40AF;
+  
+  /* Status colors remain the same for better visibility */
+  --success: #10B981;
+  --warning: #F59E0B;
+  --error: #EF4444;
+  
+  /* Shadow colors */
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  
+  /* Code block */
+  --code-bg: #374151;
+  --code-text: #E5E7EB;
+  --code-border: #4B5563;
+  
+  /* Chat bubbles */
+  --user-bubble-bg: #3B82F6;
+  --user-bubble-text: #FFFFFF;
+  --assistant-bubble-bg: #374151;
+  --assistant-bubble-text: #F9FAFB;
+  
+  /* Sidebar */
+  --sidebar-bg: #111827;
+  --sidebar-text: #F9FAFB;
+  --sidebar-item-hover: rgba(59, 130, 246, 0.2);
+  --sidebar-item-active: rgba(59, 130, 246, 0.3);
+}
+
+/* Apply themed colors to elements */
+body {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.card,
+.chat-container,
+.chat-header,
+.chat-input-container {
+  background-color: var(--bg-primary);
+}
+
+.card-header,
+.card-footer,
+.chat-header,
+.chat-input-container {
+  border-color: var(--border-light);
+}
+
+.form-control {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--border-medium);
+}
+
+.form-control:focus {
+  border-color: var(--interactive-normal);
+}
+
+.form-control::placeholder {
+  color: var(--text-tertiary);
+}
+
+.chat-message-user .chat-message-content {
+  background-color: var(--user-bubble-bg);
+  color: var(--user-bubble-text);
+}
+
+.chat-message-assistant .chat-message-content {
+  background-color: var(--assistant-bubble-bg);
+  color: var(--assistant-bubble-text);
+}
+
+.chat-input {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--border-medium);
+}
+
+.chat-suggestion {
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.chat-suggestion:hover {
+  background-color: var(--sidebar-item-hover);
+}
+
+pre, code {
+  background-color: var(--code-bg);
+  color: var(--code-text);
+}
+
+pre {
+  border: 1px solid var(--code-border);
+}
+
+/* Syntax highlighting for code blocks in dark mode */
+.dark-theme .token.comment,
+.dark-theme .token.prolog,
+.dark-theme .token.doctype,
+.dark-theme .token.cdata {
+  color: #8B949E;
+}
+
+.dark-theme .token.punctuation {
+  color: #C9D1D9;
+}
+
+.dark-theme .token.property,
+.dark-theme .token.tag,
+.dark-theme .token.boolean,
+.dark-theme .token.number,
+.dark-theme .token.constant,
+.dark-theme .token.symbol,
+.dark-theme .token.deleted {
+  color: #79C0FF;
+}
+
+.dark-theme .token.selector,
+.dark-theme .token.attr-name,
+.dark-theme .token.string,
+.dark-theme .token.char,
+.dark-theme .token.builtin,
+.dark-theme .token.inserted {
+  color: #A5D6FF;
+}
+
+.dark-theme .token.operator,
+.dark-theme .token.entity,
+.dark-theme .token.url,
+.dark-theme .language-css .token.string,
+.dark-theme .style .token.string {
+  color: #D2A8FF;
+}
+
+.dark-theme .token.atrule,
+.dark-theme .token.attr-value,
+.dark-theme .token.keyword {
+  color: #FF7B72;
+}
+
+.dark-theme .token.function,
+.dark-theme .token.class-name {
+  color: #D2A8FF;
+}
+
+.dark-theme .token.regex,
+.dark-theme .token.important,
+.dark-theme .token.variable {
+  color: #FFA657;
+}
+
+/* Theme toggle switch */
+.theme-toggle {
+  position: relative;
+  display: inline-block;
+  width: 60px;
+  height: 34px;
+}
+
+.theme-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.theme-toggle-slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--bg-tertiary);
+  transition: .4s;
+  border-radius: 34px;
+}
+
+.theme-toggle-slider:before {
+  position: absolute;
+  content: "";
+  height: 26px;
+  width: 26px;
+  left: 4px;
+  bottom: 4px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+
+input:checked + .theme-toggle-slider {
+  background-color: var(--interactive-normal);
+}
+
+input:focus + .theme-toggle-slider {
+  box-shadow: 0 0 1px var(--interactive-normal);
+}
+
+input:checked + .theme-toggle-slider:before {
+  transform: translateX(26px);
+}
+
+/* Icons for the toggle switch */
+.theme-toggle-slider:after {
+  content: "☀️";
+  position: absolute;
+  right: 8px;
+  top: 6px;
+  font-size: 12px;
+}
+
+input:checked + .theme-toggle-slider:after {
+  content: "🌙";
+  left: 8px;
+  right: auto;
+}
+
+/* Markdown content styling */
+.markdown-content h1 {
+  border-bottom: 1px solid var(--border-light);
+  padding-bottom: var(--spacing-2);
+}
+
+.markdown-content h2 {
+  border-bottom: 1px solid var(--border-light);
+  padding-bottom: var(--spacing-1);
+}
+
+.markdown-content blockquote {
+  border-left: 4px solid var(--border-medium);
+  padding-left: var(--spacing-4);
+  margin-left: 0;
+  margin-right: 0;
+  color: var(--text-secondary);
+}
+
+.markdown-content table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: var(--spacing-4);
+}
+
+.markdown-content table th,
+.markdown-content table td {
+  border: 1px solid var(--border-light);
+  padding: var(--spacing-2) var(--spacing-3);
+}
+
+.markdown-content table th {
+  background-color: var(--bg-tertiary);
+  font-weight: 600;
+}
+
+.markdown-content hr {
+  border: none;
+  border-top: 1px solid var(--border-light);
+  margin: var(--spacing-4) 0;
+}
+
+.markdown-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-md);
+}
+
+.markdown-content a {
+  color: var(--interactive-normal);
+  text-decoration: none;
+}
+
+.markdown-content a:hover {
+  text-decoration: underline;
+}

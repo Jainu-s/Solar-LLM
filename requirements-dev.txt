@@ -1,0 +1,41 @@
+# Core dependencies with minimal version constraints
+fastapi>=0.95.0
+uvicorn>=0.22.0
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+
+# Database
+pymongo>=4.3.0
+chromadb>=0.4.0
+
+# LangChain ecosystem
+langchain-community>=0.0.10
+langchain-chroma>=0.1.0
+langchain-huggingface>=0.0.1
+
+# NLP and embedding
+sentence-transformers==2.6.0
+transformers>=4.39.0
+torch>=2.0.0
+accelerate>=0.22.0
+google-generativeai>=0.2.0
+
+# Text processing
+nltk>=3.8.0
+fuzzywuzzy>=0.18.0
+python-Levenshtein>=0.20.0
+
+# PDF Processing
+pdfminer.six>=20220524
+PyPDF2>=3.0.0
+
+# UI
+streamlit>=1.24.0
+pandas>=2.0.0
+plotly>=5.14.0
+numpy>=1.24.0
+matplotlib>=3.7.0
+
+# Authentication 
+passlib>=1.7.4
+PyJWT>=2.6.0

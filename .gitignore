@@ -1,0 +1,31 @@
+echo "
+# Ignore Python virtual environments and dependencies
+venv/
+.env
+*.pyc
+__pycache__/
+
+# Ignore logs and temp files
+*.log
+logs/
+tmp/
+
+# Ignore large model and binary files
+*.so
+*.pt
+*.onnx
+*.h5
+*.pkl
+*.tflite
+*.ckpt
+models/
+datasets/
+checkpoints/
+
+# Ignore Git pack files and LFS cache
+.git/objects/pack/
+.git/lfs/
+" > .gitignore
+
+git add .gitignore
+git commit -m "Added .gitignore to prevent unnecessary files"
