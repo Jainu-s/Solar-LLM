@@ -51,7 +51,7 @@ class LRUCache(OrderedDict):
             return False
 
 # Memory cache instances
-_MEMORY_CACHE = LRUCache(settings.CACHE_MAX_ITEMS)
+_MEMORY_CACHE: Dict[str, Any] = {}
 _CACHE_EXPIRY: Dict[str, float] = {}
 _CACHE_LOCK = threading.RLock()
 
@@ -133,7 +133,8 @@ class CacheManager:
                             # Add to memory cache for faster access next time
                             if self.memory_cache_enabled:
                                 with _CACHE_LOCK:
-                                    _MEMORY_CACHE.set(key, value)
+                                    # _MEMORY_CACHE.set(key, value)
+                                    _MEMORY_CACHE[key] = value
                                     if "expiry" in cache_data:
                                         _CACHE_EXPIRY[key] = cache_data["expiry"]
                             
@@ -167,7 +168,8 @@ class CacheManager:
         # Set in memory cache
         if self.memory_cache_enabled:
             with _CACHE_LOCK:
-                _MEMORY_CACHE.set(key, value)
+                # _MEMORY_CACHE.set(key, value)
+                _MEMORY_CACHE[key] = value
                 
                 if expiry_time:
                     _CACHE_EXPIRY[key] = expiry_time

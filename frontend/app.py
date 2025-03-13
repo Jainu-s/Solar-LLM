@@ -1,5 +1,20 @@
 import os
+import sys
+
+# Add project root to Python path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, project_root)
+
+# Page configuration MUST be the first Streamlit command
 import streamlit as st
+st.set_page_config(
+    page_title="Solar LLM",
+    page_icon="☀️",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# Rest of the imports
 import streamlit.components.v1 as components
 from datetime import datetime
 import json
@@ -11,14 +26,6 @@ from frontend.components.dashboard import dashboard_page
 from frontend.components.settings import settings_page
 from frontend.utils.api import init_api_client
 from frontend.utils.session import load_session, save_session, clear_session
-
-# Page configuration
-st.set_page_config(
-    page_title="Solar LLM",
-    page_icon="☀️",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
 
 # Apply custom styling
 apply_custom_css()

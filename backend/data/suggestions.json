@@ -1,0 +1,30 @@
+{
+  "general": [
+    "How do solar panels work?",
+    "What is the ROI on a residential solar system?",
+    "How many solar panels do I need?",
+    "What are solar incentives in my area?",
+    "What's the difference between monocrystalline and polycrystalline panels?"
+  ],
+  "technical": [
+    "How to calculate solar panel efficiency?",
+    "What is DC to AC ratio in solar design?",
+    "How does temperature affect solar panel output?",
+    "What is the lifespan of a solar inverter?",
+    "How to size a battery for solar storage?"
+  ],
+  "financial": [
+    "What tax credits are available for solar in 2025?",
+    "How does net metering work?",
+    "What financing options exist for solar projects?",
+    "How to calculate solar payback period?",
+    "What is the cost per watt for solar installation?"
+  ],
+  "maintenance": [
+    "How often should solar panels be cleaned?",
+    "What maintenance is required for solar systems?",
+    "How to troubleshoot common solar inverter issues?",
+    "Signs that your solar panels need replacement",
+    "How to monitor solar system performance?"
+  ]
+}

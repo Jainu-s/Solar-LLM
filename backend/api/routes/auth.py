@@ -101,12 +101,11 @@ async def register(
 
 @router.post("/token", response_model=TokenResponse)
 async def login(
+    request: Request,
+    response: Response,
     form_data: OAuth2PasswordRequestForm = Depends(),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    request: Request = Depends(),  # Use Depends() instead of removing completely
-    response: Response = Depends()  # Use Depends() instead of removing completely
+    background_tasks: BackgroundTasks = BackgroundTasks()
 ):
-    # Rest of code stays the same
     """
     OAuth2 compatible token login, get an access token for future requests
     """
@@ -168,12 +167,11 @@ async def login(
 
 @router.post("/login", response_model=TokenResponse)
 async def client_login(
+    request: Request,
+    response: Response,
     login_data: UserLogin,
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    request: Request = Depends(),  # Use Depends() instead of removing completely
-    response: Response = Depends()  # Use Depends() instead of removing completely
+    background_tasks: BackgroundTasks = BackgroundTasks()
 ):
-    # Rest of code stays the same
     """
     Client login for web/mobile apps
     """
@@ -386,11 +384,10 @@ async def confirm_password_reset(
 @router.post("/password-change")
 async def change_password(
     password_data: PasswordChangeRequest,
+    request: Request,
     current_user = Depends(session_manager.get_current_user),
-    background_tasks: BackgroundTasks = BackgroundTasks(),
-    request: Request = Depends()  # Use Depends() instead of removing completely
+    background_tasks: BackgroundTasks = BackgroundTasks()
 ):
-    # Rest of code stays the same
     """
     Change user password
     """

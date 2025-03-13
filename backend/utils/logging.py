@@ -2,11 +2,12 @@ import os
 import logging
 import sys
 import json
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
 from datetime import datetime
 import traceback
 import logging.handlers
 import time
+from fastapi import Request, Response
 
 from backend.config import settings
 
@@ -220,59 +221,85 @@ class RequestLogger:
         # Log request
         log_with_extras(self.logger, level, message, log_extras)
 
+
+
 class RequestLogMiddleware:
     """
     Middleware for logging HTTP requests
     """
     
-    def __init__(self):
+    def __init__(self, app: Callable):
+        """
+        Initialize middleware with the ASGI application
+        
+        Args:
+            app: ASGI application
+        """
+        self.app = app
         self.logger = RequestLogger()
     
-    async def __call__(self, request, call_next):
+    async def __call__(self, scope, receive, send):
+        # Only process HTTP requests
+        if scope['type'] != 'http':
+            return await self.app(scope, receive, send)
+        
         # Record start time
         start_time = time.time()
         
-        try:
-            # Process request
-            response = await call_next(request)
+        # Track request details
+        request_details = {
+            'method': scope.get('method', 'UNKNOWN'),
+            'path': scope.get('path', 'UNKNOWN'),
+            'client_ip': scope.get('client', ('UNKNOWN', 0))[0],
+            'headers': dict(scope.get('headers', []))
+        }
+        
+        # Wrap send to intercept response
+        async def wrapped_send(message):
+            nonlocal start_time, request_details
             
-            # Record end time
-            end_time = time.time()
+            if message['type'] == 'http.response.start':
+                # Calculate response time
+                end_time = time.time()
+                
+                try:
+                    # Log request details
+                    self.logger.log_request(
+                        method=request_details['method'],
+                        path=request_details['path'],
+                        status_code=message.get('status', 500),
+                        response_time=end_time - start_time,
+                        client_ip=request_details['client_ip'],
+                        user_agent=next((
+                            value.decode('utf-8') 
+                            for key, value in request_details['headers'] 
+                            if key.decode('utf-8').lower() == 'user-agent'
+                        ), None)
+                    )
+                except Exception as log_error:
+                    print(f"Error logging request: {log_error}")
             
-            # Log request
-            self.logger.log_request(
-                method=request.method,
-                path=request.url.path,
-                status_code=response.status_code,
-                response_time=end_time - start_time,
-                user_id=request.state.user_id if hasattr(request.state, "user_id") else None,
-                client_ip=request.client.host,
-                user_agent=request.headers.get("user-agent"),
-                query_params=dict(request.query_params)
-            )
-            
-            return response
-            
-        except Exception as e:
-            # Record end time
-            end_time = time.time()
-            
-            # Log error
-            self.logger.log_request(
-                method=request.method,
-                path=request.url.path,
-                status_code=500,
-                response_time=end_time - start_time,
-                user_id=request.state.user_id if hasattr(request.state, "user_id") else None,
-                client_ip=request.client.host,
-                user_agent=request.headers.get("user-agent"),
-                query_params=dict(request.query_params),
-                extras={"error": str(e), "traceback": traceback.format_exc()}
-            )
-            
-            # Re-raise exception
-            raise
+            await send(message)
+        
+        # Continue with the request
+        return await self.app(scope, receive, wrapped_send)
 
+def create_log_middleware(app=None):
+    """
+    Factory function for creating request logging middleware
+    
+    Args:
+        app: ASGI application (used by Starlette middleware stack)
+    
+    Returns:
+        RequestLogMiddleware instance
+    """
+    def middleware_factory(app):
+        return RequestLogMiddleware(app)
+    
+    return middleware_factory
+
+    
 class PerformanceMonitor:
     """
     Monitor for tracking performance metrics

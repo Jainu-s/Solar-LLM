@@ -8,8 +8,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse
 
 from backend.api.routes import api_router
-from backend.utils.sessions import ensure_safe_indices
-from backend.utils.logging import setup_logger, RequestLogMiddleware
+from backend.utils.session import ensure_safe_indices
+from backend.utils.logging import setup_logger, RequestLogMiddleware, create_log_middleware
 from backend.db.mongodb import create_indices
 from backend.config import settings
 
@@ -39,8 +39,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 # Add request logging middleware
-app.add_middleware(RequestLogMiddleware)
+app.add_middleware(create_log_middleware)
+
+# # Use the middleware factory function
+# app.add_middleware(create_log_middleware)
 
 # Mount API router
 app.include_router(api_router, prefix=settings.API_PREFIX)

@@ -1,5 +1,5 @@
 # Import main modules for easier access
-from frontend.app import main
+# from frontend.app import main
 from frontend.enhanced_ui import (
     apply_custom_css,
     apply_custom_theme,

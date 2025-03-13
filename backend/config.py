@@ -106,8 +106,10 @@ class Settings(BaseSettings):
     SEARCH_CACHE_TTL: int = Field(3600, env="SEARCH_CACHE_TTL")  # 1 hour
     MAX_SEARCH_RESULTS: int = Field(5, env="MAX_SEARCH_RESULTS")
     
+    
     # Caching settings
     RESPONSE_CACHE_TTL: int = Field(3600, env="RESPONSE_CACHE_TTL")  # 1 hour
+    CACHE_MAX_ITEMS: int = Field(1000, env="CACHE_MAX_ITEMS")  # Maximum number of items in memory cache
     
     # Rate limiting
     MIN_QUERY_INTERVAL: float = Field(0.1, env="MIN_QUERY_INTERVAL")  # seconds

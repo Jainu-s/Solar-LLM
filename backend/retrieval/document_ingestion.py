@@ -54,10 +54,11 @@ class DocumentIngestionManager:
     def _initialize_collection(self) -> None:
         """Initialize the vector database collection"""
         try:
-            # Check if collection exists
-            collections = self.chroma_client.list_collections()
+            # Get list of collection names
+            collection_names = self.chroma_client.list_collections()
             
-            if self.collection_name not in [c.name for c in collections]:
+            # Check if collection exists
+            if self.collection_name not in collection_names:
                 logger.info(f"Creating collection: {self.collection_name}")
                 self.chroma_client.create_collection(name=self.collection_name)
             
