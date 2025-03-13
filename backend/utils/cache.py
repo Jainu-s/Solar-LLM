@@ -2,18 +2,56 @@ import os
 import json
 import time
 import pickle
-from typing import Any, Dict, Optional, List, Union, Set
+from typing import Any, Dict, Optional, List, Union, Set, Tuple
 import threading
 from datetime import datetime
 import hashlib
+from collections import OrderedDict
 
 from backend.utils.logging import setup_logger
+from backend.config import settings
 
 logger = setup_logger("cache")
 
-# In-memory cache for development or small deployments
+# In-memory cache using LRU (Least Recently Used) strategy
 # For production, this would use Redis or a similar distributed cache
-_MEMORY_CACHE: Dict[str, Any] = {}
+class LRUCache(OrderedDict):
+    """Thread-safe LRU cache implementation"""
+    
+    def __init__(self, max_size=1000):
+        super().__init__()
+        self.max_size = max_size
+        self._lock = threading.RLock()
+    
+    def get(self, key):
+        """Get an item from the cache, moving it to the end of the LRU order"""
+        with self._lock:
+            if key not in self:
+                return None
+            self.move_to_end(key)
+            return super().__getitem__(key)
+    
+    def set(self, key, value):
+        """Add an item to the cache, evicting least recently used items if needed"""
+        with self._lock:
+            if key in self:
+                self.move_to_end(key)
+            super().__setitem__(key, value)
+            if len(self) > self.max_size:
+                # Remove oldest item (first item in ordered dict)
+                oldest = next(iter(self))
+                del self[oldest]
+    
+    def delete(self, key):
+        """Remove an item from the cache"""
+        with self._lock:
+            if key in self:
+                del self[key]
+                return True
+            return False
+
+# Memory cache instances
+_MEMORY_CACHE = LRUCache(settings.CACHE_MAX_ITEMS)
 _CACHE_EXPIRY: Dict[str, float] = {}
 _CACHE_LOCK = threading.RLock()
 
@@ -26,13 +64,14 @@ class CacheManager:
     - File-based cache for persistence
     - Cache invalidation by key or prefix
     - Automatic cache cleanup
+    - LRU (Least Recently Used) eviction policy
     """
     
     def __init__(self):
         self.memory_cache_enabled = True
         self.file_cache_enabled = True
         self.file_cache_dir = os.path.join(os.path.dirname(__file__), "..", "..", "data", "cache")
-        self.max_memory_items = 1000
+        self.max_memory_items = settings.CACHE_MAX_ITEMS
         self.cleanup_interval = 300  # 5 minutes
         
         # Create cache directory if it doesn't exist
@@ -67,12 +106,12 @@ class CacheManager:
         # First try memory cache
         if self.memory_cache_enabled:
             with _CACHE_LOCK:
-                if key in _MEMORY_CACHE:
-                    # Check if expired
-                    if key in _CACHE_EXPIRY and time.time() > _CACHE_EXPIRY[key]:
-                        self._remove_from_memory(key)
-                    else:
-                        value = _MEMORY_CACHE[key]
+                # Check if expired
+                if key in _CACHE_EXPIRY and time.time() > _CACHE_EXPIRY[key]:
+                    self._remove_from_memory(key)
+                else:
+                    value = _MEMORY_CACHE.get(key)
+                    if value is not None:
                         logger.debug(f"Cache hit (memory): {key}")
                         return value
         
@@ -94,7 +133,7 @@ class CacheManager:
                             # Add to memory cache for faster access next time
                             if self.memory_cache_enabled:
                                 with _CACHE_LOCK:
-                                    _MEMORY_CACHE[key] = value
+                                    _MEMORY_CACHE.set(key, value)
                                     if "expiry" in cache_data:
                                         _CACHE_EXPIRY[key] = cache_data["expiry"]
                             
@@ -128,11 +167,7 @@ class CacheManager:
         # Set in memory cache
         if self.memory_cache_enabled:
             with _CACHE_LOCK:
-                # Check if we need to remove old items
-                if len(_MEMORY_CACHE) >= self.max_memory_items:
-                    self._remove_oldest_items()
-                
-                _MEMORY_CACHE[key] = value
+                _MEMORY_CACHE.set(key, value)
                 
                 if expiry_time:
                     _CACHE_EXPIRY[key] = expiry_time
@@ -176,8 +211,9 @@ class CacheManager:
         # Remove from memory cache
         if self.memory_cache_enabled:
             with _CACHE_LOCK:
-                if key in _MEMORY_CACHE:
-                    self._remove_from_memory(key)
+                if _MEMORY_CACHE.delete(key):
+                    if key in _CACHE_EXPIRY:
+                        del _CACHE_EXPIRY[key]
                     found = True
         
         # Remove from file cache
@@ -209,11 +245,15 @@ class CacheManager:
         # Invalidate in memory cache
         if self.memory_cache_enabled:
             with _CACHE_LOCK:
-                keys_to_delete = [key for key in _MEMORY_CACHE if key.startswith(prefix)]
+                # Get a copy of keys to avoid modification during iteration
+                all_keys = list(_MEMORY_CACHE.keys())
                 
-                for key in keys_to_delete:
-                    self._remove_from_memory(key)
-                    count += 1
+                for key in all_keys:
+                    if key.startswith(prefix):
+                        _MEMORY_CACHE.delete(key)
+                        if key in _CACHE_EXPIRY:
+                            del _CACHE_EXPIRY[key]
+                        count += 1
         
         # Invalidate in file cache
         if self.file_cache_enabled:
@@ -255,14 +295,14 @@ class CacheManager:
         if self.memory_cache_enabled:
             with _CACHE_LOCK:
                 current_time = time.time()
-                keys_to_delete = [
-                    key for key, expiry in _CACHE_EXPIRY.items()
-                    if current_time > expiry
-                ]
                 
-                for key in keys_to_delete:
-                    self._remove_from_memory(key)
-                    count += 1
+                # Get a copy of the keys and expiry times to avoid modification during iteration
+                expiry_items = list(_CACHE_EXPIRY.items())
+                
+                for key, expiry in expiry_items:
+                    if current_time > expiry:
+                        self._remove_from_memory(key)
+                        count += 1
         
         # Clean up file cache
         if self.file_cache_enabled:
@@ -285,6 +325,7 @@ class CacheManager:
                         except Exception as e:
                             # If we can't read the file, consider it corrupted and delete it
                             try:
+                                logger.warning(f"Removing corrupted cache file: {file_path}")
                                 os.unlink(file_path)
                                 count += 1
                             except:
@@ -309,7 +350,7 @@ class CacheManager:
         if self.memory_cache_enabled:
             with _CACHE_LOCK:
                 count = len(_MEMORY_CACHE)
-                _MEMORY_CACHE.clear()
+                _MEMORY_CACHE = LRUCache(self.max_memory_items)
                 _CACHE_EXPIRY.clear()
         
         # Clear file cache
@@ -342,7 +383,8 @@ class CacheManager:
             "memory_cache": {
                 "enabled": self.memory_cache_enabled,
                 "items": 0,
-                "expired_items": 0
+                "expired_items": 0,
+                "max_items": self.max_memory_items
             },
             "file_cache": {
                 "enabled": self.file_cache_enabled,
@@ -410,35 +452,10 @@ class CacheManager:
         Args:
             key: Cache key
         """
-        if key in _MEMORY_CACHE:
-            del _MEMORY_CACHE[key]
-        
-        if key in _CACHE_EXPIRY:
-            del _CACHE_EXPIRY[key]
-    
-    def _remove_oldest_items(self, count: int = 100) -> None:
-        """
-        Remove the oldest items from memory cache
-        
-        Args:
-            count: Number of items to remove
-        """
-        if not _MEMORY_CACHE:
-            return
-        
-        # Get keys sorted by expiry time (oldest first)
-        if _CACHE_EXPIRY:
-            sorted_keys = sorted(
-                _CACHE_EXPIRY.keys(),
-                key=lambda k: _CACHE_EXPIRY.get(k, 0)
-            )
-        else:
-            # If no expiry times, just take any keys
-            sorted_keys = list(_MEMORY_CACHE.keys())
-        
-        # Remove oldest items
-        for key in sorted_keys[:count]:
-            self._remove_from_memory(key)
+        with _CACHE_LOCK:
+            _MEMORY_CACHE.delete(key)
+            if key in _CACHE_EXPIRY:
+                del _CACHE_EXPIRY[key]
 
 # Create singleton instance
 cache_manager = CacheManager()

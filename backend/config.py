@@ -28,10 +28,10 @@ class Settings(BaseSettings):
     DEBUG: bool = Field(False, env="DEBUG")
     
     # Path settings
-    BASE_DIR: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    DATA_DIR: str = os.path.join(BASE_DIR, "data")
-    LOGS_DIR: str = os.path.join(BASE_DIR, "logs")
-    UPLOADS_DIR: str = os.path.join(BASE_DIR, "uploads")
+    BASE_DIR: str = Field(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), env="BASE_DIR")
+    DATA_DIR: str = Field(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data"), env="DATA_DIR")
+    LOGS_DIR: str = Field(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "logs"), env="LOGS_DIR")
+    UPLOADS_DIR: str = Field(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "uploads"), env="UPLOADS_DIR")
     
     # API settings
     API_PREFIX: str = "/api"
@@ -58,7 +58,7 @@ class Settings(BaseSettings):
     MONGO_URI: str = Field("", env="MONGO_URI")
     
     # Vector database settings
-    VECTOR_DB_PATH: str = os.path.join(DATA_DIR, "vector_db")
+    VECTOR_DB_PATH: str = Field(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "vector_db"), env="VECTOR_DB_PATH")
     VECTOR_DB_COLLECTION: str = "solar_docs"
     
     # Added ChromaDB and Meta Index settings
