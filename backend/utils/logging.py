@@ -8,6 +8,7 @@ import traceback
 import logging.handlers
 import time
 from fastapi import Request, Response
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from backend.config import settings
 
@@ -222,83 +223,66 @@ class RequestLogger:
         log_with_extras(self.logger, level, message, log_extras)
 
 
-
-class RequestLogMiddleware:
+# Updated to use BaseHTTPMiddleware
+class RequestLogMiddleware(BaseHTTPMiddleware):
     """
     Middleware for logging HTTP requests
     """
     
-    def __init__(self, app: Callable):
-        """
-        Initialize middleware with the ASGI application
-        
-        Args:
-            app: ASGI application
-        """
-        self.app = app
+    def __init__(self, app):
+        super().__init__(app)
         self.logger = RequestLogger()
     
-    async def __call__(self, scope, receive, send):
-        # Only process HTTP requests
-        if scope['type'] != 'http':
-            return await self.app(scope, receive, send)
-        
+    async def dispatch(self, request: Request, call_next):
         # Record start time
         start_time = time.time()
         
-        # Track request details
-        request_details = {
-            'method': scope.get('method', 'UNKNOWN'),
-            'path': scope.get('path', 'UNKNOWN'),
-            'client_ip': scope.get('client', ('UNKNOWN', 0))[0],
-            'headers': dict(scope.get('headers', []))
-        }
-        
-        # Wrap send to intercept response
-        async def wrapped_send(message):
-            nonlocal start_time, request_details
+        try:
+            # Process the request
+            response = await call_next(request)
             
-            if message['type'] == 'http.response.start':
-                # Calculate response time
-                end_time = time.time()
-                
-                try:
-                    # Log request details
-                    self.logger.log_request(
-                        method=request_details['method'],
-                        path=request_details['path'],
-                        status_code=message.get('status', 500),
-                        response_time=end_time - start_time,
-                        client_ip=request_details['client_ip'],
-                        user_agent=next((
-                            value.decode('utf-8') 
-                            for key, value in request_details['headers'] 
-                            if key.decode('utf-8').lower() == 'user-agent'
-                        ), None)
-                    )
-                except Exception as log_error:
-                    print(f"Error logging request: {log_error}")
+            # Calculate response time
+            response_time = time.time() - start_time
             
-            await send(message)
-        
-        # Continue with the request
-        return await self.app(scope, receive, wrapped_send)
+            # Log request
+            self.logger.log_request(
+                method=request.method,
+                path=request.url.path,
+                status_code=response.status_code,
+                response_time=response_time,
+                client_ip=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent")
+            )
+            
+            return response
+            
+        except Exception as e:
+            # Calculate response time
+            response_time = time.time() - start_time
+            
+            # Log error
+            self.logger.log_request(
+                method=request.method,
+                path=request.url.path,
+                status_code=500,
+                response_time=response_time,
+                client_ip=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+                extras={"error": str(e), "traceback": traceback.format_exc()}
+            )
+            
+            # Re-raise the exception
+            raise
 
-def create_log_middleware(app=None):
+# Maintaining compatibility with existing code
+def create_log_middleware():
     """
-    Factory function for creating request logging middleware
-    
-    Args:
-        app: ASGI application (used by Starlette middleware stack)
+    Factory function for request logging middleware
     
     Returns:
-        RequestLogMiddleware instance
+        RequestLogMiddleware class
     """
-    def middleware_factory(app):
-        return RequestLogMiddleware(app)
-    
-    return middleware_factory
-
+    return RequestLogMiddleware
     
 class PerformanceMonitor:
     """

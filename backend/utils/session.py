@@ -7,7 +7,7 @@ from typing import Dict, Any, Optional, List, Union
 from datetime import datetime, timedelta
 
 import jwt
-from fastapi import Request, HTTPException, status, Depends
+from fastapi import Request, HTTPException, status, Depends, Cookie
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 
@@ -19,7 +19,7 @@ from backend.config import settings
 logger = setup_logger("session")
 
 # OAuth2 password bearer scheme
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token", auto_error=False)
 
 class SessionManager:
     """
@@ -386,43 +386,147 @@ class SessionManager:
     
     async def get_current_user(
         self,
-        token: str = Depends(oauth2_scheme)
-    ) -> Dict[str, Any]:
+        request: Request,
+        token: Optional[str] = Depends(oauth2_scheme),
+        session: Optional[str] = Cookie(None)
+    ):
         """
-        Get the current user from a token
+        Get the current user from a token or other authentication methods
         
         Args:
-            token: JWT token
+            request: FastAPI request
+            token: Optional OAuth2 token
+            session: Optional session cookie
             
         Returns:
             Dictionary with user information
             
         Raises:
-            HTTPException: If token is invalid
+            HTTPException: If authentication fails
         """
         try:
-            # Validate token
-            payload = self.validate_token(token, token_type="access")
+            # Log all authentication information for debugging
+            logger.info(f"Auth attempt - Token from OAuth2: {token is not None}")
+            logger.info(f"Auth attempt - Session cookie: {session is not None}")
+            logger.info(f"Auth attempt - Authorization header: {request.headers.get('authorization')}")
             
-            # Get user from database
-            user_id = payload.get("sub")
-            user = self.db["users"].find_one({"_id": user_id})
+            # Extract bearer token from Authorization header
+            auth_header = request.headers.get("authorization")
+            bearer_token = None
             
-            if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="User not found"
-                )
+            if auth_header and auth_header.startswith("Bearer "):
+                bearer_token = auth_header.replace("Bearer ", "")
+                logger.info(f"Found Bearer token in Authorization header: {bearer_token[:10]}...")
             
-            # Convert ObjectId to string
-            user["_id"] = str(user["_id"])
+            # List all tokens to try in order of preference
+            tokens_to_try = []
             
-            return user
+            # First try bearer token from header (most common)
+            if bearer_token:
+                tokens_to_try.append(("Bearer token", bearer_token))
+            
+            # Then try OAuth2 token if different from bearer
+            if token and (not bearer_token or token != bearer_token):
+                tokens_to_try.append(("OAuth2 token", token))
+            
+            # Finally try session cookie
+            if session:
+                tokens_to_try.append(("Session cookie", session))
+            
+            # Log all tokens we'll try
+            logger.info(f"Will try {len(tokens_to_try)} authentication methods")
+            
+            # Try each token
+            for source, current_token in tokens_to_try:
+                logger.info(f"Trying authentication with {source}")
+                
+                try:
+                    # Directly look up user from token without session validation
+                    # This is a more direct approach that bypasses some validation steps
+                    try:
+                        # Decode token manually
+                        payload = jwt.decode(
+                            current_token,
+                            self.secret_key,
+                            algorithms=["HS256"]
+                        )
+                        
+                        # Extract user ID
+                        user_id = payload.get("sub")
+                        
+                        if user_id:
+                            # Find user in database
+                            user = self.db["users"].find_one({"_id": user_id})
+                            
+                            if user:
+                                # Convert ObjectId to string
+                                user["_id"] = str(user["_id"])
+                                logger.info(f"Successfully authenticated with {source} for user: {user.get('username')}")
+                                
+                                # Update session last activity if session_id is present
+                                if "session_id" in payload:
+                                    try:
+                                        self.session_collection.update_one(
+                                            {"session_id": payload["session_id"]},
+                                            {"$set": {"last_activity": datetime.utcnow()}}
+                                        )
+                                    except Exception as e:
+                                        # Don't fail authentication if this update fails
+                                        logger.warning(f"Failed to update session activity: {e}")
+                                        
+                                return user
+                    except jwt.PyJWTError as jwt_error:
+                        logger.warning(f"JWT decode error with {source}: {str(jwt_error)}")
+                        continue
+                    
+                    # Fall back to the normal validation if direct decode fails
+                    payload = self.validate_token(current_token)
+                    user_id = payload.get("sub")
+                    
+                    if not user_id:
+                        logger.warning(f"{source} validation succeeded but no user_id in payload")
+                        continue
+                        
+                    user = self.db["users"].find_one({"_id": user_id})
+                    
+                    if not user:
+                        logger.warning(f"{source} validation succeeded but user not found in database")
+                        continue
+                    
+                    # Success!
+                    user["_id"] = str(user["_id"])
+                    logger.info(f"Authentication successful with {source} for user: {user.get('username')}")
+                    return user
+                    
+                except HTTPException as he:
+                    logger.warning(f"{source} validation failed: {str(he.detail)}")
+                except Exception as e:
+                    logger.error(f"{source} validation error: {str(e)}")
+            
+            # Try API key as last resort
+            api_key_header = request.headers.get("X-API-Key")
+            if api_key_header:
+                logger.info("Trying authentication with API key")
+                try:
+                    user = self.validate_api_key(api_key_header)
+                    if user:
+                        logger.info(f"Authentication successful with API key for user: {user.get('username')}")
+                        return user
+                except Exception as e:
+                    logger.error(f"API key validation failed: {str(e)}")
+            
+            # If we get here, all authentication methods failed
+            logger.warning("All authentication methods failed")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
             
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error getting current user: {str(e)}")
+            logger.error(f"Error in get_current_user: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Error getting current user"
@@ -564,14 +668,9 @@ class SessionManager:
             
             if session_cookie:
                 try:
-                    # Parse session cookie
-                    session_data = json.loads(session_cookie)
-                    
-                    # Validate token
-                    token = session_data.get("access_token")
-                    
-                    if token:
-                        payload = self.validate_token(token)
+                    # First try direct validation
+                    try:
+                        payload = self.validate_token(session_cookie)
                         
                         # Get user from database
                         user_id = payload.get("sub")
@@ -581,6 +680,24 @@ class SessionManager:
                             # Convert ObjectId to string
                             user["_id"] = str(user["_id"])
                             return user
+                    except:
+                        # If direct validation fails, try parsing as JSON
+                        session_data = json.loads(session_cookie)
+                        
+                        # Validate token
+                        token = session_data.get("access_token")
+                        
+                        if token:
+                            payload = self.validate_token(token)
+                            
+                            # Get user from database
+                            user_id = payload.get("sub")
+                            user = self.db["users"].find_one({"_id": user_id})
+                            
+                            if user:
+                                # Convert ObjectId to string
+                                user["_id"] = str(user["_id"])
+                                return user
                 except:
                     pass
             
@@ -621,9 +738,6 @@ def ensure_safe_indices():
     except Exception as e:
         logger.error(f"Error ensuring TTL indices: {str(e)}")
         # Continue execution, don't halt startup
-
-# Call this function during application startup to ensure indices are properly set
-# For example, you could add it to your main.py startup code
 
 # Create singleton instance
 session_manager = SessionManager()

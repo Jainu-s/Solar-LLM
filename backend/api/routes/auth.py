@@ -67,6 +67,8 @@ async def register(
     Register a new user
     """
     try:
+        logger.info(f"Registration attempt for username: {user.username}, email: {user.email}")
+        
         # Register user
         created_user = auth_service.register_user(
             user.email,
@@ -74,6 +76,8 @@ async def register(
             user.password,
             user.full_name
         )
+        
+        logger.info(f"User registered successfully: {user.username}, {user.email}")
         
         # Track registration
         background_tasks.add_task(
@@ -90,7 +94,8 @@ async def register(
         
         return created_user
         
-    except HTTPException:
+    except HTTPException as he:
+        logger.warning(f"Registration failed: {str(he.detail)} for {user.username}, {user.email}")
         raise
     except Exception as e:
         logger.error(f"Error registering user: {str(e)}")
@@ -110,6 +115,8 @@ async def login(
     OAuth2 compatible token login, get an access token for future requests
     """
     try:
+        logger.info(f"Login attempt (OAuth2) for username: {form_data.username}")
+        
         # Authenticate user
         user = auth_service.authenticate_user(
             form_data.username,
@@ -134,12 +141,14 @@ async def login(
         # Set cookie for web clients
         response.set_cookie(
             key="session",
-            value=session["access_token"],
+            value=session["access_token"],  # Store just the token, not the whole object
             httponly=True,
             secure=not settings.DEBUG,  # Secure in production
             samesite="lax",
             max_age=expires
         )
+        
+        logger.info(f"Login successful for username: {form_data.username}")
         
         # Track login
         background_tasks.add_task(
@@ -156,7 +165,8 @@ async def login(
         
         return session
         
-    except HTTPException:
+    except HTTPException as he:
+        logger.warning(f"Login failed: {str(he.detail)} for {form_data.username}")
         raise
     except Exception as e:
         logger.error(f"Error during login: {str(e)}")
@@ -176,6 +186,8 @@ async def client_login(
     Client login for web/mobile apps
     """
     try:
+        logger.info(f"Login attempt (client) for username: {login_data.username}")
+        
         # Authenticate user
         user = auth_service.authenticate_user(
             login_data.username,
@@ -197,6 +209,7 @@ async def client_login(
             # Set long-lived cookie for "remember me"
             expires = settings.JWT_REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
         
+        # Set the access token directly in the cookie (not as JSON)
         response.set_cookie(
             key="session",
             value=session["access_token"],
@@ -205,6 +218,10 @@ async def client_login(
             samesite="lax",
             max_age=expires
         )
+        
+        # Log the token details for debugging
+        logger.info(f"Login successful - Token type: {session['token_type']}")
+        logger.info(f"Login successful - Cookie set with access token")
         
         # Track login
         background_tasks.add_task(
@@ -221,7 +238,8 @@ async def client_login(
         
         return session
         
-    except HTTPException:
+    except HTTPException as he:
+        logger.warning(f"Login failed: {str(he.detail)} for {login_data.username}")
         raise
     except Exception as e:
         logger.error(f"Error during login: {str(e)}")
@@ -240,6 +258,8 @@ async def refresh_token(
     Refresh access token
     """
     try:
+        logger.debug(f"Token refresh request received")
+        
         # Refresh token
         token_data = session_manager.refresh_access_token(
             request_data.refresh_token,
@@ -255,6 +275,8 @@ async def refresh_token(
             secure=not settings.DEBUG,  # Secure in production
             samesite="lax"
         )
+        
+        logger.debug(f"Token refreshed successfully for user: {token_data['username']}")
         
         return token_data
         
@@ -278,19 +300,25 @@ async def logout(
     Logout and invalidate session
     """
     try:
+        logger.debug(f"Logout request received, session_id: {session_id}")
+        
         # Revoke session if session_id provided
         if session_id:
+            logger.debug(f"Revoking session by ID: {session_id}")
             session_manager.revoke_session(session_id)
         
         # If not, try to get session from cookie
         elif session:
             try:
                 # Decode token to get session ID
+                logger.debug("Attempting to revoke session from cookie")
                 payload = session_manager.validate_token(session)
                 if payload and "session_id" in payload:
-                    session_manager.revoke_session(payload["session_id"])
-            except:
-                pass
+                    session_id = payload["session_id"]
+                    logger.debug(f"Revoking session from cookie: {session_id}")
+                    session_manager.revoke_session(session_id)
+            except Exception as e:
+                logger.error(f"Error decoding session cookie during logout: {str(e)}")
         
         # Clear session cookie
         response.delete_cookie(
@@ -299,6 +327,8 @@ async def logout(
             httponly=True,
             samesite="lax"
         )
+        
+        logger.debug("Logout completed successfully")
         
     except Exception as e:
         logger.error(f"Error during logout: {str(e)}")
@@ -314,6 +344,8 @@ async def request_password_reset(
     Request a password reset
     """
     try:
+        logger.info(f"Password reset requested for email: {request_data.email}")
+        
         # Create password reset token
         token = auth_service.create_password_reset_token(request_data.email)
         
@@ -333,13 +365,16 @@ async def request_password_reset(
         
         if settings.DEBUG:
             # Return token directly in debug mode
+            logger.debug(f"Password reset token generated (DEBUG): {token}")
             return {"reset_token": token}
         else:
             # In production, don't return the token
+            logger.info(f"Password reset token generated (would be emailed in production)")
             return {"message": "Password reset instructions sent if email exists"}
         
-    except HTTPException:
+    except HTTPException as he:
         # Don't reveal if email exists
+        logger.warning(f"Password reset request failed: {str(he.detail)}")
         if settings.DEBUG:
             raise
         return {"message": "Password reset instructions sent if email exists"}
@@ -357,8 +392,12 @@ async def confirm_password_reset(
     Confirm password reset with token
     """
     try:
+        logger.info("Password reset confirmation attempt")
+        
         # Reset password
         auth_service.reset_password(reset_data.token, reset_data.password)
+        
+        logger.info("Password reset successful")
         
         # Track password reset
         background_tasks.add_task(
@@ -372,7 +411,8 @@ async def confirm_password_reset(
         
         return {"message": "Password reset successful"}
         
-    except HTTPException:
+    except HTTPException as he:
+        logger.warning(f"Password reset confirmation failed: {str(he.detail)}")
         raise
     except Exception as e:
         logger.error(f"Error confirming password reset: {str(e)}")
@@ -393,6 +433,7 @@ async def change_password(
     """
     try:
         user_id = current_user["_id"]
+        logger.info(f"Password change attempt for user: {current_user.get('username', user_id)}")
         
         # Change password
         auth_service.change_password(
@@ -400,6 +441,8 @@ async def change_password(
             password_data.current_password,
             password_data.new_password
         )
+        
+        logger.info(f"Password changed successfully for user: {current_user.get('username', user_id)}")
         
         # Track password change
         background_tasks.add_task(
@@ -414,7 +457,8 @@ async def change_password(
         
         return {"message": "Password changed successfully"}
         
-    except HTTPException:
+    except HTTPException as he:
+        logger.warning(f"Password change failed: {str(he.detail)}")
         raise
     except Exception as e:
         logger.error(f"Error changing password: {str(e)}")
@@ -425,11 +469,23 @@ async def change_password(
 
 @router.get("/me")
 async def get_current_user(
+    request: Request,
+    session: Optional[str] = Cookie(None),
     current_user = Depends(session_manager.get_current_user)
 ):
     """
     Get current user info
     """
+    # Log detailed information about the request
+    logger.info(f"GET /me request received")
+    logger.info(f"Auth header: {request.headers.get('authorization')}")
+    logger.info(f"Session cookie: {session}")
+    
+    if current_user:
+        logger.info(f"User authenticated: {current_user.get('username', current_user.get('_id'))}")
+    else:
+        logger.warning("User not authenticated")
+    
     return current_user
 
 @router.get("/sessions")
@@ -441,6 +497,7 @@ async def get_user_sessions(
     """
     try:
         user_id = current_user["_id"]
+        logger.debug(f"Sessions requested for user: {current_user.get('username', user_id)}")
         
         # Get sessions
         sessions = session_manager.get_user_sessions(user_id)
@@ -464,6 +521,7 @@ async def revoke_session(
     """
     try:
         user_id = current_user["_id"]
+        logger.debug(f"Session revoke requested for session: {session_id} by user: {current_user.get('username', user_id)}")
         
         # Get session info
         sessions = session_manager.get_user_sessions(user_id)
@@ -476,6 +534,7 @@ async def revoke_session(
                 break
         
         if not session_belongs_to_user:
+            logger.warning(f"Unauthorized session revoke attempt: {session_id} by user: {current_user.get('username', user_id)}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Session not found or doesn't belong to user"
@@ -483,6 +542,7 @@ async def revoke_session(
         
         # Revoke session
         session_manager.revoke_session(session_id)
+        logger.debug(f"Session revoked successfully: {session_id}")
         
     except HTTPException:
         raise

@@ -1,5 +1,6 @@
 import os
 import time
+import threading
 from typing import Dict, Any
 
 from fastapi import FastAPI, Request, Response
@@ -9,7 +10,8 @@ from fastapi.responses import JSONResponse
 
 from backend.api.routes import api_router
 from backend.utils.session import ensure_safe_indices
-from backend.utils.logging import setup_logger, RequestLogMiddleware, create_log_middleware
+# Update the import to use RequestLogMiddleware directly
+from backend.utils.logging import setup_logger, RequestLogMiddleware
 from backend.db.mongodb import create_indices
 from backend.config import settings
 
@@ -26,10 +28,6 @@ app = FastAPI(
     openapi_url="/api/openapi.json" if settings.DEBUG else None,
 )
 
-@app.on_event("startup")
-async def startup_event():
-    ensure_safe_indices()
-
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -39,12 +37,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-
-# Add request logging middleware
-app.add_middleware(create_log_middleware)
-
-# # Use the middleware factory function
-# app.add_middleware(create_log_middleware)
+# Add request logging middleware - use the class directly
+app.add_middleware(RequestLogMiddleware)
 
 # Mount API router
 app.include_router(api_router, prefix=settings.API_PREFIX)
@@ -53,6 +47,10 @@ app.include_router(api_router, prefix=settings.API_PREFIX)
 static_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "static")
 if os.path.exists(static_dir):
     app.mount("/static", StaticFiles(directory=static_dir), name="static")
+
+# In-memory store for rate limiting
+RATE_LIMIT_STORE = {}
+RATE_LIMIT_LOCK = threading.Lock()
 
 # Rate limiting middleware
 @app.middleware("http")
@@ -64,32 +62,42 @@ async def rate_limit_middleware(request: Request, call_next):
     if request.url.path.startswith("/static/") or request.url.path == "/":
         return await call_next(request)
     
-    # Use in-memory rate limiting for now
-    # In production, this would use Redis or another distributed cache
+    # Rate limit key
     rate_limit_key = f"rate_limit:{client_ip}"
     
     # Get current timestamp
     current_time = time.time()
     
-    # Check rate limit
-    # This is a simple implementation, in production use a token bucket or sliding window
-    from backend.utils.cache import get_cache, set_cache
-    
-    requests = get_cache(rate_limit_key) or []
-    
-    # Remove requests older than 1 minute
-    recent_requests = [ts for ts in requests if current_time - ts < 60]
-    
-    # Check if too many requests
-    if len(recent_requests) >= 60:  # 60 requests per minute
-        return JSONResponse(
-            status_code=429,
-            content={"detail": "Too many requests. Please try again later."}
-        )
-    
-    # Add current request
-    recent_requests.append(current_time)
-    set_cache(rate_limit_key, recent_requests, expiry=60)
+    # Thread-safe access to rate limit store
+    with RATE_LIMIT_LOCK:
+        # Get existing requests or empty list
+        recent_requests = RATE_LIMIT_STORE.get(rate_limit_key, [])
+        
+        # Remove requests older than 1 minute
+        recent_requests = [ts for ts in recent_requests if current_time - ts < 60]
+        
+        # Check if too many requests
+        if len(recent_requests) >= 60:  # 60 requests per minute
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Please try again later."}
+            )
+        
+        # Add current request
+        recent_requests.append(current_time)
+        
+        # Store updated list
+        RATE_LIMIT_STORE[rate_limit_key] = recent_requests
+        
+        # Set expiry (cleanup old entries periodically)
+        if len(RATE_LIMIT_STORE) > 1000:  # Simple cleanup to prevent memory leaks
+            keys_to_delete = []
+            for key, timestamps in RATE_LIMIT_STORE.items():
+                if not timestamps or current_time - max(timestamps) > 600:  # 10 minutes
+                    keys_to_delete.append(key)
+            
+            for key in keys_to_delete:
+                del RATE_LIMIT_STORE[key]
     
     # Continue processing request
     return await call_next(request)
@@ -106,6 +114,9 @@ async def startup_event():
     
     # Create MongoDB indices
     create_indices()
+    
+    # Initialize session indices
+    ensure_safe_indices()
     
     logger.info("Application startup complete")
 
